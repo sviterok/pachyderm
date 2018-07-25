@@ -170,7 +170,7 @@ func (d *driver) getPachClient(ctx context.Context) *client.APIClient {
 		var err error
 		d.pachConn, err = grpc.Dial(d.address, client.PachDialOptions()...)
 		if err != nil {
-			panic(fmt.Sprintf("could not intiailize Pachyderm client in driver: %v", err))
+			panic(fmt.Sprintf("could not initialize Pachyderm client to %s in driver: %v", d.address, err))
 		}
 		d._pachClient = &client.APIClient{
 			AuthAPIClient:   auth.NewAPIClient(d.pachConn),

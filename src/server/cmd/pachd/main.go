@@ -163,6 +163,23 @@ func doSidecarMode(appEnvObj interface{}) error {
 		return err
 	}
 	address = fmt.Sprintf("%s:%d", address, appEnv.Port)
+	blockCacheBytes, err := units.RAMInBytes(appEnv.BlockCacheBytes)
+	if err != nil {
+		return err
+	}
+	blockAPIServer, err := pfs_server.NewBlockAPIServer(appEnv.StorageRoot, blockCacheBytes, appEnv.StorageBackend, etcdAddress)
+	if err != nil {
+		return err
+	}
+	healthServer := health.NewHealthServer()
+	authAPIServer, err := authserver.NewAuthServer(address, etcdAddress, path.Join(appEnv.EtcdPrefix, appEnv.AuthEtcdPrefix))
+	if err != nil {
+		return err
+	}
+	enterpriseAPIServer, err := eprsserver.NewEnterpriseServer(address, etcdAddress, path.Join(appEnv.EtcdPrefix, appEnv.EnterpriseEtcdPrefix))
+	if err != nil {
+		return err
+	}
 	pfsCacheSize, err := strconv.Atoi(appEnv.PFSCacheSize)
 	if err != nil {
 		return err
@@ -181,23 +198,7 @@ func doSidecarMode(appEnvObj interface{}) error {
 	if err != nil {
 		return err
 	}
-	blockCacheBytes, err := units.RAMInBytes(appEnv.BlockCacheBytes)
-	if err != nil {
-		return err
-	}
-	blockAPIServer, err := pfs_server.NewBlockAPIServer(appEnv.StorageRoot, blockCacheBytes, appEnv.StorageBackend, etcdAddress)
-	if err != nil {
-		return err
-	}
-	healthServer := health.NewHealthServer()
-	authAPIServer, err := authserver.NewAuthServer(address, etcdAddress, path.Join(appEnv.EtcdPrefix, appEnv.AuthEtcdPrefix))
-	if err != nil {
-		return err
-	}
-	enterpriseAPIServer, err := eprsserver.NewEnterpriseServer(address, etcdAddress, path.Join(appEnv.EtcdPrefix, appEnv.EnterpriseEtcdPrefix))
-	if err != nil {
-		return err
-	}
+	// Run the servers
 	return grpcutil.Serve(
 		func(s *grpc.Server) {
 			pfsclient.RegisterAPIServer(s, pfsAPIServer)
@@ -286,31 +287,7 @@ func doFullMode(appEnvObj interface{}) error {
 		address,
 	)
 	cacheServer := cache_server.NewCacheServer(router, appEnv.NumShards)
-	pfsAPIServer, err := pfs_server.NewAPIServer(address, []string{etcdAddress}, path.Join(appEnv.EtcdPrefix, appEnv.PFSEtcdPrefix), int64(pfsCacheSize))
-	if err != nil {
-		return err
-	}
 	kubeNamespace := getNamespace()
-	ppsAPIServer, err := pps_server.NewAPIServer(
-		etcdAddress,
-		path.Join(appEnv.EtcdPrefix, appEnv.PPSEtcdPrefix),
-		address,
-		kubeClient,
-		kubeNamespace,
-		appEnv.WorkerImage,
-		appEnv.WorkerSidecarImage,
-		appEnv.WorkerImagePullPolicy,
-		appEnv.StorageRoot,
-		appEnv.StorageBackend,
-		appEnv.StorageHostPath,
-		appEnv.IAMRole,
-		appEnv.ImagePullSecret,
-		appEnv.NoExposeDockerSocket,
-		reporter,
-	)
-	if err != nil {
-		return err
-	}
 	go func() {
 		if err := sharder.RegisterFrontends(nil, address, []shard.Frontend{cacheServer}); err != nil {
 			log.Printf("error from sharder.RegisterFrontend %s", grpcutil.ScrubGRPC(err))
@@ -348,6 +325,32 @@ func doFullMode(appEnvObj interface{}) error {
 	if err != nil {
 		return err
 	}
+	pfsAPIServer, err := pfs_server.NewAPIServer(address, []string{etcdAddress}, path.Join(appEnv.EtcdPrefix, appEnv.PFSEtcdPrefix), int64(pfsCacheSize))
+	if err != nil {
+		return err
+	}
+	ppsAPIServer, err := pps_server.NewAPIServer(
+		etcdAddress,
+		path.Join(appEnv.EtcdPrefix, appEnv.PPSEtcdPrefix),
+		address,
+		kubeClient,
+		kubeNamespace,
+		appEnv.WorkerImage,
+		appEnv.WorkerSidecarImage,
+		appEnv.WorkerImagePullPolicy,
+		appEnv.StorageRoot,
+		appEnv.StorageBackend,
+		appEnv.StorageHostPath,
+		appEnv.IAMRole,
+		appEnv.ImagePullSecret,
+		appEnv.NoExposeDockerSocket,
+		reporter,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Run the servers
 	var eg errgroup.Group
 	eg.Go(func() error {
 		err := http.ListenAndServe(fmt.Sprintf(":%v", pach_http.HTTPPort), httpServer)
