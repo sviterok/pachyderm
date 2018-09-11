@@ -389,16 +389,20 @@ func (a *apiServer) watchConfig() {
 			if !ok {
 				return errors.New("admin watch closed unexpectedly")
 			}
+			fmt.Printf(">>> (apiServer.watchConfig) received watch event on %v (%v)\n", string(ev.Key), ev.Type)
 			b.Reset() // event successfully received
 
 			if a.activationState() != full {
 				return fmt.Errorf("received config event while auth not fully " +
 					"activated (should be impossible), restarting")
 			}
+			fmt.Printf(">>> (apiServer.watchConfig) about to call wrapper for updateSAMLSP\n")
 			if err := func() error {
 				// Lock a.configMu in case we need to modify a.configCache
+				fmt.Printf(">>> (apiServer.watchConfig) about to lock configMu\n")
 				a.configMu.Lock()
 				defer a.configMu.Unlock()
+				fmt.Printf(">>> (apiServer.watchConfig) configMu is locked\n")
 
 				// Parse event data and potentially update configCache
 				var key string // always configKey, just need to put it somewhere
@@ -419,6 +423,7 @@ func (a *apiServer) watchConfig() {
 			}(); err != nil {
 				return err
 			}
+			fmt.Printf(">>> (apiServer.watchConfig) configMu is unlocked\n")
 		}
 	}, b, func(err error, d time.Duration) error {
 		logrus.Printf("error watching auth config: %v; retrying in %v", err, d)

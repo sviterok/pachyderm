@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"runtime/debug"
 	"time"
 
 	"github.com/crewjam/saml"
@@ -35,8 +36,10 @@ var defaultRedirectURL = &url.URL{
 // use
 // This code is heavily based on the crewjam/saml/samlsp.Middleware constructor
 func lookupIDPMetadata(name string, mdURL *url.URL) (*saml.EntityDescriptor, error) {
+	debug.PrintStack()
 	c := http.DefaultClient
 	req, err := http.NewRequest("GET", mdURL.String(), nil)
+	fmt.Printf(">>> mdURL: %s\n", mdURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve IdP metadata for %q: %v", name, err)
 	}
@@ -47,6 +50,7 @@ func lookupIDPMetadata(name string, mdURL *url.URL) (*saml.EntityDescriptor, err
 	b.MaxElapsedTime = 30 * time.Second
 	b.MaxInterval = 2 * time.Second
 	backoff.RetryNotify(func() error {
+		fmt.Printf(">>> %s requesting metadata\n", time.Now().Format(time.StampNano))
 		resp, err := c.Do(req)
 		if err != nil {
 			return err
@@ -70,6 +74,7 @@ func lookupIDPMetadata(name string, mdURL *url.URL) (*saml.EntityDescriptor, err
 	})
 
 	// Successfully retrieved metadata--try parsing it
+	fmt.Printf("raw metadata:\n%s\n", rawMetadata)
 	entity := &saml.EntityDescriptor{}
 	err = xml.Unmarshal(rawMetadata, entity)
 	if err != nil {
